@@ -20,6 +20,7 @@ preprocess = trn.Compose([
 
 from misc.resnet_utils import myResnet
 import misc.resnet
+import inspect
 
 class DataLoaderRaw():
 
@@ -36,8 +37,10 @@ class DataLoaderRaw():
         self.cnn_model = opt.get('cnn_model', 'resnet101')
         self.my_resnet = getattr(misc.resnet, self.cnn_model)()
         self.my_resnet.load_state_dict(torch.load(os.path.join(self.cnn_weight_dir, self.cnn_model+'.pth')))
-        print('resnet params: {}'.format(self.my_resnet.parameters()))
+        print(inspect.getmembers(self.my_resnet, lambda a:not(inspect.isroutine(a))))
         exit()
+        # print('resnet params: {}'.format(self.my_resnet.parameters()))
+        # exit()
         self.my_resnet = myResnet(self.my_resnet)
         self.my_resnet.cuda()
         self.my_resnet.eval()
