@@ -132,15 +132,15 @@ if len(opt.id) == 0:
 
 ignore = ["id", "batch_size", "beam_size", "start_from", "language_eval"]
 for k in vars(infos['opt']).keys():
-    if k not in ignore:
-        if k in vars(opt):
-            #assert vars(opt)[k] == vars(infos['opt'])[k], k + ' option not consistent'
-            if vars(opt)[k] != vars(infos['opt'])[k]:
-                found_issue = k + ' option not consistent'
-                if not utils.want_to_continue(found_issue):
-                    exit()
-        else:
-            vars(opt).update({k: vars(infos['opt'])[k]}) # copy over options from model
+    # if k not in ignore:
+    #     if k in vars(opt):
+    #         #assert vars(opt)[k] == vars(infos['opt'])[k], k + ' option not consistent'
+    #         if vars(opt)[k] != vars(infos['opt'])[k]:
+    #             found_issue = k + ' option not consistent'
+    #             if not utils.want_to_continue(found_issue):
+    #                 exit()
+    #     else:
+        vars(opt).update({k: vars(infos['opt'])[k]}) # copy over options from model
 
 vocab = infos['vocab'] # ix -> word mapping
 
