@@ -22,7 +22,7 @@ class myResnet(nn.Module):
 
         fc = x.mean(3).mean(2).squeeze()
         att = F.adaptive_avg_pool2d(x,[att_size,att_size]).squeeze().permute(1, 2, 0)
-        print('FC: {} | Att: {}'.format(fc.shape, att.shape))
-        exit()
+        # print('FC: {} | Att: {}'.format(fc.shape, att.shape))
+        # exit()
         return fc, att
 
