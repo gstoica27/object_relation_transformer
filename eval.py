@@ -144,6 +144,7 @@ for k in vars(infos['opt']).keys():
 
 vocab = infos['vocab'] # ix -> word mapping
 # print("start path: {}".format(opt.start_from))
+opt.use_box = 0
 print('config: {}'.format(opt))
 # Setup the model
 model = models.setup(opt)
