@@ -281,6 +281,9 @@ class BoxMultiHeadedAttention(nn.Module):
         nbatches = input_query.size(0)
 
         #tensor with entries R_mn given by a hardcoded embedding of the relative position between bbox_m and bbox_n
+        print('inputs: Query: {} | Key: {} | Box: {}'.format(
+            input_query.shape, input_key.shape, input_box.shape
+        ))
         relative_geometry_embeddings = utils.BoxRelationalEmbedding(input_box, trignometric_embedding= self.trignometric_embedding)
         flatten_relative_geometry_embeddings = relative_geometry_embeddings.view(-1,self.dim_g)
 
