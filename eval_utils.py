@@ -106,6 +106,7 @@ def eval_split(model, crit, loader, eval_kwargs={}):
                 #if model_opts.use_box:
                 if use_box==True:
                     boxes_data=data['boxes']
+                    print(boxes_data)
                     boxes = torch.from_numpy(boxes_data).cuda() if boxes_data is not None else boxes_data
                     loss = crit(model(fc_feats, att_feats, boxes, labels, att_masks), labels[:,1:], masks[:,1:]).item()
                 else:
