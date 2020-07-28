@@ -143,7 +143,7 @@ for k in vars(infos['opt']).keys():
             vars(opt).update({k: vars(infos['opt'])[k]}) # copy over options from model
 
 vocab = infos['vocab'] # ix -> word mapping
-print("start path: {}".format(opt.start_from))
+# print("start path: {}".format(opt.start_from))
 print('config: {}'.format(opt))
 # Setup the model
 model = models.setup(opt)
