@@ -144,6 +144,7 @@ for k in vars(infos['opt']).keys():
 
 vocab = infos['vocab'] # ix -> word mapping
 print("start path: {}".format(opt.start_from))
+print('config: {}'.format(opt))
 # Setup the model
 model = models.setup(opt)
 model.load_state_dict(torch.load(opt.model))
