@@ -151,9 +151,9 @@ for k in vars(infos['opt']).keys():
                 print('original: {} | new: {}'.format(
                     vars(opt)[k], vars(infos['opt'])[k]
                 ))
-                found_issue = k + ' option not consistent'
-                if not utils.want_to_continue(found_issue):
-                    exit()
+                # found_issue = k + ' option not consistent'
+                # if not utils.want_to_continue(found_issue):
+                #     exit()
         else:
             vars(opt).update({k: vars(infos['opt'])[k]}) # copy over options from model
 
