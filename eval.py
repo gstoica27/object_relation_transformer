@@ -148,6 +148,9 @@ for k in vars(infos['opt']).keys():
         if k in vars(opt):
             #assert vars(opt)[k] == vars(infos['opt'])[k], k + ' option not consistent'
             if vars(opt)[k] != vars(infos['opt'])[k]:
+                print('original: {} | new: {}'.format(
+                    vars(opt)[k], vars(infos['opt'])[k]
+                ))
                 found_issue = k + ' option not consistent'
                 if not utils.want_to_continue(found_issue):
                     exit()
