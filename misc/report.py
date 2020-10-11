@@ -17,7 +17,7 @@ from typing import IO, Optional, Dict, List, Iterable
 from scipy.stats import ttest_rel
 from six.moves import cPickle as pickle
 sys.path.append("coco-caption")
-from pycocoevalcap.eval import COCOEvalCap
+# from pycocoevalcap.eval import COCOEvalCap
 
 HTML_IMAGE_WIDTH_PIXELS = 400
 HTML_IMAGE_ALIGN_LEFT = 'left'
