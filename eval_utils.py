@@ -126,9 +126,12 @@ def eval_split(model, crit, loader, eval_kwargs={}):
         with torch.no_grad():
             #if model_opts.use_box:
             if use_box==True:
+                # import pdb; pdb.set_trace()
                 boxes_data= data['boxes'][np.arange(loader.batch_size) * loader.seq_per_img]
                 boxes = torch.from_numpy(boxes_data).cuda() if boxes_data is not None else boxes_data
                 seq = model(fc_feats, att_feats, boxes, att_masks, opt=eval_kwargs, mode='sample')[0].data
+                # box_attn = model.bbox_attn.bbox_attn
+                # import pdb; pdb.set_trace()
             else:
                 seq = model(fc_feats, att_feats, att_masks, opt=eval_kwargs, mode='sample')[0].data
 

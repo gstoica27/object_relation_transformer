@@ -29,6 +29,8 @@ class DataLoaderRaw():
         self.coco_json = opt.get('coco_json', '')
         self.folder_path = opt.get('folder_path', '')
         self.cnn_weight_dir = opt.get('cnn_weight_dir', '')
+        self.boxes_path = opt.get('boxes_path', '')
+        self.features_path = opt.get('features_path', '')
 
         self.batch_size = opt.get('batch_size', 1)
         self.seq_per_img = 1
@@ -82,6 +84,10 @@ class DataLoaderRaw():
                         self.ids.append(str(n)) # just order them sequentially
                         n = n + 1
 
+        # Load pre-computed parts
+        self.boxes = np.load(self.boxes_path)
+        self.features = np.load(self.features_path)
+
         self.N = len(self.files)
         print('DataLoaderRaw found ', self.N, ' images')
 
@@ -91,12 +97,12 @@ class DataLoaderRaw():
         batch_size = batch_size or self.batch_size
 
         # pick an index of the datapoint to load next
-        fc_batch = np.ndarray((batch_size, 2048), dtype = 'float32')
-        att_batch = np.ndarray((batch_size, 14, 14, 2048), dtype = 'float32')
+        fc_batch = np.ndarray((batch_size, 36, 2048), dtype = 'float32')
+        att_batch = np.ndarray((batch_size, 36, 14, 14, 2048), dtype = 'float32')
         max_index = self.N
         wrapped = False
         infos = []
-
+        boxes_batch = []
         for i in range(batch_size):
             ri = self.iterator
             ri_next = ri + 1
@@ -107,6 +113,8 @@ class DataLoaderRaw():
             self.iterator = ri_next
 
             img = skimage.io.imread(self.files[ri])
+            img_boxes = torch.from_numpy(self.boxes[ri])
+            img_features = torch.from_numpy(self.features[ri]).cuda()
 
             if len(img.shape) == 2:
                 img = img[:,:,np.newaxis]
@@ -116,9 +124,13 @@ class DataLoaderRaw():
             img = torch.from_numpy(img.transpose([2,0,1])).cuda()
             img = preprocess(img)
             with torch.no_grad():
-                tmp_fc, tmp_att = self.my_resnet(img)
+                tmp_fc, tmp_att = self.my_resnet(img, precomputed_fc=img_features)
 
-            fc_batch[i] = tmp_fc.data.cpu().float().numpy()
+            boxes_batch.append(img_boxes)
+
+
+            # fc_batch[i] = tmp_fc.data.cpu().float().numpy()
+            fc_batch[i] = img_features.data.cpu().float().numpy()
             att_batch[i] = tmp_att.data.cpu().float().numpy()
 
             info_struct = {}
@@ -127,8 +139,10 @@ class DataLoaderRaw():
             infos.append(info_struct)
 
         data = {}
+        # import pdb;pdb.set_trace()
         data['fc_feats'] = fc_batch
         data['att_feats'] = att_batch
+        data['boxes'] = np.stack(boxes_batch, axis=0)
         data['bounds'] = {'it_pos_now': self.iterator, 'it_max': self.N, 'wrapped': wrapped}
         data['infos'] = infos
 

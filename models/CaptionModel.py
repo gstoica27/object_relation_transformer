@@ -14,17 +14,22 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import *
 import misc.utils as utils
+from functools import reduce
 
 
 class CaptionModel(nn.Module):
     def __init__(self):
         super(CaptionModel, self).__init__()
 
+    def debugger(self, mode, *args, **kwargs):
+        import pdb; pdb.set_trace()
+
     # implements beam search
     # calls beam_step and returns the final set of beams
     # augments log-probabilities with diversity terms when number of groups > 1
-
+    # @torch.jit.script_method
     def forward(self, *args, **kwargs):
+        # import pdb;pdb.set_trace()
         mode = kwargs.get('mode', 'forward')
         if 'mode' in kwargs:
             del kwargs['mode']

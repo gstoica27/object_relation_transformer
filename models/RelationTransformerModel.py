@@ -212,7 +212,7 @@ def box_attention(query, key, value, box_relation_embds_matrix, mask=None, dropo
     Compute 'Scaled Dot Product Attention as in paper Relation Networks for Object Detection'.
     Follow the implementation in https://github.com/heefe92/Relation_Networks-pytorch/blob/master/model.py#L1026-L1055
     '''
-
+    # import pdb; pdb.set_trace()
     N = value.size()[:2]
     dim_k = key.size(-1)
     dim_g = box_relation_embds_matrix.size()[-1]
@@ -238,8 +238,11 @@ def box_attention(query, key, value, box_relation_embds_matrix, mask=None, dropo
     if dropout is not None:
         w_mn = dropout(w_mn)
 
-    output = torch.matmul(w_mn,w_v)
-
+    w_mn_flat = w_mn.view(-1, 36)
+    w_mn_maxes = (w_mn_flat == w_mn_flat.max(dim=1, keepdim=True)[0]).view_as(w_mn).to(dtype=torch.float32)
+    output = torch.matmul(w_mn_maxes, w_v)
+    # output = torch.matmul(w_mn,w_v)
+    # import pdb;pdb.set_trace()
     return output, w_mn
 
 class BoxMultiHeadedAttention(nn.Module):
@@ -286,6 +289,7 @@ class BoxMultiHeadedAttention(nn.Module):
         ))
         relative_geometry_embeddings = utils.BoxRelationalEmbedding(input_box, trignometric_embedding= self.trignometric_embedding)
         flatten_relative_geometry_embeddings = relative_geometry_embeddings.view(-1,self.dim_g)
+        # flatten_relative_geometry_embeddings = relative_geometry_embeddings.view(-1)
 
         # 1) Do all the linear projections in batch from d_model => h x d_k
         query, key, value = \
@@ -293,6 +297,9 @@ class BoxMultiHeadedAttention(nn.Module):
              for l, x in zip(self.linears, (input_query, input_key, input_value))]
         box_size_per_head = list(relative_geometry_embeddings.shape[:3])
         box_size_per_head.insert(1, 1)
+
+        # import pdb; pdb.set_trace()
+
         relative_geometry_weights_per_head = [l(flatten_relative_geometry_embeddings).view(box_size_per_head) for l in self.WGs]
         relative_geometry_weights = torch.cat((relative_geometry_weights_per_head),1)
         relative_geometry_weights = F.relu(relative_geometry_weights)
@@ -475,8 +482,9 @@ class RelationTransformerModel(CaptionModel):
         return att_feats,boxes, seq, att_masks, seq_mask
 
     def _forward(self, fc_feats, att_feats, boxes,  seq, att_masks=None):
-
-        att_feats, boxes, seq, att_masks, seq_mask = self._prepare_feature(att_feats, att_masks, boxes, seq)
+        # import pdb; pdb.set_trace()
+        # att_feats, boxes, seq, att_masks, seq_mask = self._prepare_feature(att_feats, att_masks, boxes, seq)
+        att_feats, boxes, seq, att_masks, seq_mask = self._prepare_feature(fc_feats, att_masks, boxes, seq)
         out = self.model(att_feats, boxes, seq, att_masks, seq_mask)
         outputs = self.model.generator(out)
         return outputs
@@ -501,8 +509,9 @@ class RelationTransformerModel(CaptionModel):
     def _sample_beam(self, fc_feats, att_feats, boxes, att_masks=None, opt={}):
         beam_size = opt.get('beam_size', 10)
         batch_size = fc_feats.size(0)
-
-        att_feats, boxes, seq, att_masks, seq_mask = self._prepare_feature(att_feats, att_masks, boxes)
+        # import pdb; pdb.set_trace()
+        # att_feats, boxes, seq, att_masks, seq_mask = self._prepare_feature(att_feats, att_masks, boxes)
+        att_feats, boxes, seq, att_masks, seq_mask = self._prepare_feature(fc_feats, att_masks, boxes)
         memory = self.model.encode(att_feats, boxes, att_masks)
 
         assert beam_size <= self.vocab_size + 1, 'lets assume this for now, otherwise this corner case causes a few headaches down the road. can be dealt with in future if needed'
@@ -582,8 +591,9 @@ class RelationTransformerModel(CaptionModel):
             return self._sample_beam(fc_feats, att_feats, boxes, att_masks, opt)
 
         batch_size = att_feats.shape[0]
-
-        att_feats, boxes, seq, att_masks, seq_mask = self._prepare_feature(att_feats, att_masks, boxes)
+        # import pdb; pdb.set_trace()
+        # att_feats, boxes, seq, att_masks, seq_mask = self._prepare_feature(att_feats, att_masks, boxes)
+        att_feats, boxes, seq, att_masks, seq_mask = self._prepare_feature(fc_feats, att_masks, boxes)
 
         state = None
         memory = self.model.encode(att_feats, boxes, att_masks)

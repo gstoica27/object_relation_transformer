@@ -109,12 +109,16 @@ parser.add_argument('--verbose_beam', type=int, default=1,
                 help='if we need to print out all beam search beams.')
 parser.add_argument('--verbose_loss', type=int, default=0,
                 help='if we need to calculate loss.')
+parser.add_argument('--input_boxes_path', type=str, default='',
+                    help='path to the file containing image bboxes')
+parser.add_argument('--input_features_path', type=str, default='',
+                    help='path to the file containing image features')
 
 
 opt = parser.parse_args()
 
 # Load infos
-with open(opt.infos_path) as f:
+with open(opt.infos_path, 'rb') as f:
     infos = cPickle.load(f)
 
 # override and collect parameters
@@ -160,7 +164,7 @@ for k in vars(infos['opt']).keys():
 
 vocab = infos['vocab'] # ix -> word mapping
 # print("start path: {}".format(opt.start_from))
-opt.use_box = 0
+# opt.use_box = 0
 print('config: {}'.format(opt))
 # Setup the model
 model = models.setup(opt)
@@ -176,10 +180,12 @@ if len(opt.image_folder) == 0:
   loader = DataLoader(opt)
 else:
   loader = DataLoaderRaw({'folder_path': opt.image_folder,
-                            'coco_json': opt.coco_json,
-                            'batch_size': opt.batch_size,
-                            'cnn_model': opt.cnn_model,
-                            'cnn_weight_dir': opt.cnn_weight_dir})
+                          'coco_json': opt.coco_json,
+                          'batch_size': opt.batch_size,
+                          'cnn_model': opt.cnn_model,
+                          'cnn_weight_dir': opt.cnn_weight_dir,
+                          'boxes_path': opt.input_boxes_path,
+                          'features_path': opt.input_features_path})
 # When eval using provided pretrained model, the vocab may be different from what you have in your cocotalk.json
 # So make sure to use the vocab in infos file.
 loader.ix_to_word = infos['vocab']
