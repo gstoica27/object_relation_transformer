@@ -30,9 +30,13 @@ import misc.utils as utils
 import copy
 import math
 import numpy as np
+import pdb
 
 from .CaptionModel import CaptionModel
 from .AttModel import sort_pack_padded_sequence, pad_unsort_packed_sequence, pack_wrapper
+
+SELECTED_BBOXES = None
+BBOX_MASKS = None
 
 class EncoderDecoder(nn.Module):
     """
@@ -237,9 +241,10 @@ def box_attention(query, key, value, box_relation_embds_matrix, mask=None, dropo
     w_mn = torch.nn.Softmax(dim=-1)(w_mn)
     if dropout is not None:
         w_mn = dropout(w_mn)
-
+    # Only use the most relevant BBoxes to an ROI bbox to compute caption
     w_mn_flat = w_mn.view(-1, 36)
     w_mn_maxes = (w_mn_flat == w_mn_flat.max(dim=1, keepdim=True)[0]).view_as(w_mn).to(dtype=torch.float32)
+    # import pdb; pdb.set_trace()
     output = torch.matmul(w_mn_maxes, w_v)
     # output = torch.matmul(w_mn,w_v)
     # import pdb;pdb.set_trace()
@@ -274,9 +279,11 @@ class BoxMultiHeadedAttention(nn.Module):
 
         self.attn = None
         self.dropout = nn.Dropout(p=dropout)
+        self.box_attn = None
 
 
     def forward(self, input_query, input_key, input_value, input_box, mask=None):
+        global SELECTED_BBOXES, BBOX_MASKS
         "Implements Figure 2 of Relation Network for Object Detection"
         if mask is not None:
             # Same mask applied to all h heads.
@@ -319,7 +326,16 @@ class BoxMultiHeadedAttention(nn.Module):
         if self.legacy_extra_skip:
             x = input_value + x
 
-        return self.linears[-1](x)
+        x = self.linears[-1](x)
+
+        # import pdb; pdb.set_trace()
+        if BBOX_MASKS is not None:
+            # [B, 36, 512] x [B, 36, 1]
+            x *= BBOX_MASKS.unsqueeze(-1)
+            
+        SELECTED_BBOXES = self.box_attn
+
+        return x
 
 
 class PositionwiseFeedForward(nn.Module):
@@ -377,7 +393,10 @@ class RelationTransformerModel(CaptionModel):
         position = PositionalEncoding(d_model, dropout)
         #position = BoxEncoding(d_model, dropout)
         model = EncoderDecoder(
-            Encoder(EncoderLayer(d_model, c(bbox_attn), c(ff), dropout), N),
+            Encoder(EncoderLayer(d_model, 
+                                 c(bbox_attn),
+                                 # self.bbox_attn,
+                                 c(ff), dropout), N),
             Decoder(DecoderLayer(d_model, c(attn), c(attn),
                                  c(ff), dropout), N),
             lambda x:x, # nn.Sequential(Embeddings(d_model, src_vocab), c(position)),
@@ -506,12 +525,17 @@ class RelationTransformerModel(CaptionModel):
 
         return logprobs, [ys.unsqueeze(0)]
 
-    def _sample_beam(self, fc_feats, att_feats, boxes, att_masks=None, opt={}):
+    def _sample_beam(self, fc_feats, att_feats, boxes, att_masks=None, bbox_masks=None, opt={}):
+        global BBOX_MASKS
+        global SELECTED_BBOXES
         beam_size = opt.get('beam_size', 10)
         batch_size = fc_feats.size(0)
         # import pdb; pdb.set_trace()
         # att_feats, boxes, seq, att_masks, seq_mask = self._prepare_feature(att_feats, att_masks, boxes)
         att_feats, boxes, seq, att_masks, seq_mask = self._prepare_feature(fc_feats, att_masks, boxes)
+
+        BBOX_MASKS = bbox_masks
+        # import pdb; pdb.set_trace()
         memory = self.model.encode(att_feats, boxes, att_masks)
 
         assert beam_size <= self.vocab_size + 1, 'lets assume this for now, otherwise this corner case causes a few headaches down the road. can be dealt with in future if needed'
@@ -534,16 +558,18 @@ class RelationTransformerModel(CaptionModel):
             self.done_beams[k] = self.beam_search(state, logprobs, tmp_memory, tmp_att_masks, opt=opt)
             seq[:, k] = self.done_beams[k][0]['seq'] # the first beam has highest cumulative score
             seqLogprobs[:, k] = self.done_beams[k][0]['logps']
+        selected_bboxes = np.argmax(SELECTED_BBOXES.cpu().numpy(), axis=-1)
+        # import pdb; pdb.set_trace()
         # return the samples and their log likelihoods
-        return seq.transpose(0, 1), seqLogprobs.transpose(0, 1)
+        return seq.transpose(0, 1), seqLogprobs.transpose(0, 1), selected_bboxes
 
-    def _sample_(self, fc_feats, att_feats, boxes, att_masks=None, opt={}):
+    def _sample_(self, fc_feats, att_feats, boxes, att_masks=None, bbox_masks=None, opt={}):
         sample_max = opt.get('sample_max', 1)
         beam_size = opt.get('beam_size', 1)
         temperature = opt.get('temperature', 1.0)
         decoding_constraint = opt.get('decoding_constraint', 0)
         if beam_size > 1:
-            return self._sample_beam(fc_feats, att_feats, att_masks, opt)
+            return self._sample_beam(fc_feats, att_feats, att_masks, bbox_masks, opt)
 
         if sample_max:
             with torch.no_grad():
@@ -582,13 +608,13 @@ class RelationTransformerModel(CaptionModel):
         assert (seqLogprobs*((seq_>0).float()) - seqLogprobs_*((seq_>0).float())).abs().max() < 1e-5, 'logprobs doens\'t match'
         return seq, seqLogprobs
 
-    def _sample(self, fc_feats, att_feats, boxes, att_masks=None, opt={}):
+    def _sample(self, fc_feats, att_feats, boxes, att_masks=None, bbox_masks=None, opt={}):
         sample_max = opt.get('sample_max', 1)
         beam_size = opt.get('beam_size', 1)
         temperature = opt.get('temperature', 1.0)
         decoding_constraint = opt.get('decoding_constraint', 0)
         if beam_size > 1:
-            return self._sample_beam(fc_feats, att_feats, boxes, att_masks, opt)
+            return self._sample_beam(fc_feats, att_feats, boxes, att_masks, bbox_masks, opt)
 
         batch_size = att_feats.shape[0]
         # import pdb; pdb.set_trace()
