@@ -15,7 +15,6 @@ import os
 import sys
 import misc.utils as utils
 from misc.report import ReportData
-import pdb
 
 REPORT_DATA_PKL_FILE_TEMPLATE = '%s_%s_report_data.pkl'
 
@@ -94,16 +93,14 @@ def eval_split(model, crit, loader, eval_kwargs={}):
     loss_evals = 1e-8
     predictions = []
     while True:
-        # image_selected_bboxes = []
         data = loader.get_batch(split)
         n = n + loader.batch_size
 
         if data.get('labels', None) is not None and verbose_loss:
             # forward the model to get loss
-            # pdb.set_trace()
-            tmp = [data['fc_feats'], data['att_feats'], data['labels'], data['masks'], data['att_masks'], data['bbox_masks']]
+            tmp = [data['fc_feats'], data['att_feats'], data['labels'], data['masks'], data['att_masks']]
             tmp = [torch.from_numpy(_).cuda() if _ is not None else _ for _ in tmp]
-            fc_feats, att_feats, labels, masks, att_masks, bbox_masks = tmp
+            fc_feats, att_feats, labels, masks, att_masks = tmp
 
             with torch.no_grad():
                 #if model_opts.use_box:
@@ -111,8 +108,7 @@ def eval_split(model, crit, loader, eval_kwargs={}):
                     boxes_data=data['boxes']
                     print(boxes_data)
                     boxes = torch.from_numpy(boxes_data).cuda() if boxes_data is not None else boxes_data
-                    # import pdb; pdb.set_trace()
-                    loss = crit(model(fc_feats, att_feats, boxes, labels, att_masks, bbox_masks=bbox_masks), labels[:,1:], masks[:,1:]).item()
+                    loss = crit(model(fc_feats, att_feats, boxes, labels, att_masks), labels[:,1:], masks[:,1:]).item()
                 else:
                     loss = crit(model(fc_feats, att_feats, labels, att_masks), labels[:,1:], masks[:,1:]).item()
             loss_sum = loss_sum + loss
@@ -122,24 +118,19 @@ def eval_split(model, crit, loader, eval_kwargs={}):
         # Only leave one feature for each image, in case duplicate sample
         tmp = [data['fc_feats'][np.arange(loader.batch_size) * loader.seq_per_img],
             data['att_feats'][np.arange(loader.batch_size) * loader.seq_per_img],
-            data['att_masks'][np.arange(loader.batch_size) * loader.seq_per_img] if data.get('att_masks', None) is not None else None,
-               data['bbox_masks'][np.arange(loader.batch_size) * loader.seq_per_img]]
+            data['att_masks'][np.arange(loader.batch_size) * loader.seq_per_img] if data.get('att_masks', None) is not None else None]
         tmp = [torch.from_numpy(_).cuda() if _ is not None else _ for _ in tmp]
-        fc_feats, att_feats, att_masks, bbox_masks = tmp
+        fc_feats, att_feats, att_masks = tmp
 
         # forward the model to also get generated samples for each image
         with torch.no_grad():
             #if model_opts.use_box:
             if use_box==True:
-                # import pdb; pdb.set_trace()
-                boxes_data = data['boxes'][np.arange(loader.batch_size) * loader.seq_per_img]
+                boxes_data= data['boxes'][np.arange(loader.batch_size) * loader.seq_per_img]
                 boxes = torch.from_numpy(boxes_data).cuda() if boxes_data is not None else boxes_data
-                model_outputs = model(fc_feats, att_feats, boxes, att_masks, bbox_masks=bbox_masks, opt=eval_kwargs, mode='sample')
-                seq = model_outputs[0].data
-                selected_bboxes = model_outputs[-1]
-                # image_selected_bboxes.append(selected_bboxes)
-                # box_attn = model.bbox_attn.bbox_attn
-                # import pdb; pdb.set_trace()
+                outputs = model(fc_feats, att_feats, boxes, att_masks, opt=eval_kwargs, mode='sample')
+                seq = outputs[0].data
+                selected_bboxes = outputs[-1]
             else:
                 seq = model(fc_feats, att_feats, att_masks, opt=eval_kwargs, mode='sample')[0].data
 
@@ -154,13 +145,20 @@ def eval_split(model, crit, loader, eval_kwargs={}):
             image_id = data['infos'][k]['id']
             entry = {'image_id': image_id, 'caption': sent,
                      'file_path': data['infos'][k]['file_path'],
-                     'selected_bboxes': selected_bboxes[0].transpose(1, 0).tolist()}
+                     'selected_bboxes': selected_bboxes[k].tolist()}
             if eval_kwargs.get('dump_path', 0) == 1:
                 entry['file_name'] = data['infos'][k]['file_path']
             predictions.append(entry)
             if eval_kwargs.get('dump_images', 0) == 1:
                 # dump the raw image to vis/ folder
-                cmd = 'cp "' + os.path.join(eval_kwargs['image_root'], data['infos'][k]['file_path']) + '" vis/imgs/' + str(image_id) + '.jpg' # still gross
+                partition = data['infos'][k]['file_path'].split('/')[-3]
+                # import pdb;pdb.set_trace()
+                save_dir = os.path.join(os.getcwd(), 'vis/img/{}'.format(partition))
+                os.makedirs(save_dir, exist_ok=True)
+                vid_name = data['infos'][k]['file_path'].split('/')[-2]
+                frame_num = data['infos'][k]['file_path'].split('/')[-1].split('.')[0]
+                move_path = os.path.join(save_dir, '{}_{}.jpg'.format(vid_name, frame_num))
+                cmd = 'cp "' + os.path.join(eval_kwargs['image_root'], data['infos'][k]['file_path']) + '" {}'.format(move_path) # still gross
                 print(cmd)
                 os.system(cmd)
 

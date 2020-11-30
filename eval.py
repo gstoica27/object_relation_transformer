@@ -115,6 +115,8 @@ parser.add_argument('--input_boxes_dir', type=str, default='',
 parser.add_argument('--input_features_dir', type=str, default='',
                     help='path to the file containing image features')
 parser.add_argument('--input_detections_path', type=str, default='')
+parser.add_argument('--save_id', type=str, default='',
+                    help='Id to save data to')
 
 opt = parser.parse_args()
 
@@ -213,4 +215,6 @@ if lang_stats:
 
 if opt.dump_json == 1:
     # dump the json
-    json.dump(split_predictions, open('vis/vis.json', 'w'))
+    save_dir = os.path.join(os.getcwd(), 'vis/{}'.format(opt.save_id))
+    os.makedirs(save_dir, exist_ok=True)
+    json.dump(split_predictions, open(os.path.join(save_dir, 'vis.json'), 'w'))
