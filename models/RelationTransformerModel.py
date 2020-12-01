@@ -486,7 +486,7 @@ class RelationTransformerModel(CaptionModel):
         if att_masks is None:
             att_masks = att_feats.new_ones(att_feats.shape[:2], dtype=torch.long)
         att_masks = att_masks.unsqueeze(-2)
-
+        import pdb; pdb.set_trace()
         if seq is not None:
             # crop the last one
             seq = seq[:,:-1]
@@ -530,12 +530,12 @@ class RelationTransformerModel(CaptionModel):
         global SELECTED_BBOXES
         beam_size = opt.get('beam_size', 10)
         batch_size = fc_feats.size(0)
-        # import pdb; pdb.set_trace()
+        import pdb; pdb.set_trace()
         # att_feats, boxes, seq, att_masks, seq_mask = self._prepare_feature(att_feats, att_masks, boxes)
         att_feats, boxes, seq, att_masks, seq_mask = self._prepare_feature(fc_feats, att_masks, boxes)
 
         BBOX_MASKS = bbox_masks
-        # import pdb; pdb.set_trace()
+        import pdb; pdb.set_trace()
         memory = self.model.encode(att_feats, boxes, att_masks)
 
         assert beam_size <= self.vocab_size + 1, 'lets assume this for now, otherwise this corner case causes a few headaches down the road. can be dealt with in future if needed'
