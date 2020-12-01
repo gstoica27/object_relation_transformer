@@ -216,7 +216,7 @@ def box_attention(query, key, value, box_relation_embds_matrix, mask=None, dropo
     Compute 'Scaled Dot Product Attention as in paper Relation Networks for Object Detection'.
     Follow the implementation in https://github.com/heefe92/Relation_Networks-pytorch/blob/master/model.py#L1026-L1055
     '''
-    # import pdb; pdb.set_trace()
+    import pdb; pdb.set_trace()
     N = value.size()[:2]
     dim_k = key.size(-1)
     dim_g = box_relation_embds_matrix.size()[-1]
@@ -244,10 +244,10 @@ def box_attention(query, key, value, box_relation_embds_matrix, mask=None, dropo
     # Only use the most relevant BBoxes to an ROI bbox to compute caption
     w_mn_flat = w_mn.view(-1, 36)
     w_mn_maxes = (w_mn_flat == w_mn_flat.max(dim=1, keepdim=True)[0]).view_as(w_mn).to(dtype=torch.float32)
-    # import pdb; pdb.set_trace()
+    import pdb; pdb.set_trace()
     output = torch.matmul(w_mn_maxes, w_v)
     # output = torch.matmul(w_mn,w_v)
-    # import pdb;pdb.set_trace()
+    import pdb;pdb.set_trace()
     return output, w_mn
 
 class BoxMultiHeadedAttention(nn.Module):
@@ -559,7 +559,7 @@ class RelationTransformerModel(CaptionModel):
             seq[:, k] = self.done_beams[k][0]['seq'] # the first beam has highest cumulative score
             seqLogprobs[:, k] = self.done_beams[k][0]['logps']
         selected_bboxes = np.argmax(SELECTED_BBOXES.cpu().numpy(), axis=-1)
-        # import pdb; pdb.set_trace()
+        import pdb; pdb.set_trace()
         # return the samples and their log likelihoods
         return seq.transpose(0, 1), seqLogprobs.transpose(0, 1), selected_bboxes
 
