@@ -283,6 +283,67 @@ def BoxRelationalEmbedding(f_g, dim_g=64, wave_len=1000, trignometric_embedding=
         embedding = position_mat
     return(embedding)
 
+def BoxHardConstraints(bboxes, upper_bound=20000):
+    """
+    bboxes: bbox matrix [B, N, 4]
+    upper_bound: inverse weight for overlaps
+    """
+    import pdb; pdb.set_trace()
+    num_bboxes = bboxes.shape[1]
+    weight = 1 / upper_bound
+    # [B, N, 4] --> [B, N, 1] x 4
+    x_min, y_min, x_max, y_max = torch.chunk(bboxes, 4, dim=-1)
+    height = x_max - x_min
+    width = y_max - y_min
+    areas = height * width
+    # [B, N , 1]
+    min_overlap = weight * areas
+    # [B, N, 1] --> [B, N, N]
+    x_min = x_min.repeat(1, 1, num_bboxes)
+    x_max = x_max.repeat(1, 1, num_bboxes)
+    y_min = y_min.repeat(1, 1, num_bboxes)
+    y_max = y_max.repeat(1, 1, num_bboxes)
+    # [B, N, N] --> [B, N, N]
+    x_min_T = x_min.transpose(0, 2, 1)
+    x_max_T = x_max.transpose(0, 2, 1)
+    y_min_T = y_min.transpose(0, 2, 1)
+    y_max_T = y_max.transpose(0, 2, 1)
+
+    inter_width = torch.minimum(x_max_T, x_max) - torch.maximum(x_min_T, x_min) + 1
+    inter_height = torch.minimum(y_max_T, y_max) - torch.maximum(y_min_T, y_min) + 1
+    inter_area = inter_width * inter_height
+
+    areas_T = areas.transpose(0, 2, 1)
+    union_areas = areas + areas_T - inter_area
+    # IoUs between each bbox and all other bboxes
+    ious = inter_area / union_areas
+
+    ious_minus_overlap = ious - min_overlap
+    ious_cutoff = torch.minimum(ious_minus_overlap, torch.tensor([0.]))
+    are_valid = ious_cutoff > 0.
+    # [B, N, N]
+    return are_valid
+
+def compute_bbox_intersection_area(bbox1, bbox2):
+    bbox1_x1 = bbox1[0]
+    bbox1_y1 = bbox1[1]
+    bbox1_x2 = bbox1[2]
+    bbox1_y2 = bbox1[3]
+
+    bbox2_x1 = bbox2[0]
+    bbox2_y1 = bbox2[1]
+    bbox2_x2 = bbox2[2]
+    bbox2_y2 = bbox2[3]
+
+    intersection_width = min(bbox1_x2, bbox2_x2) - max(bbox1_x1, bbox2_x1) + 1
+    intersection_height = min(bbox1_y2, bbox2_y2) - max(bbox1_y1, bbox2_y1) + 1
+
+    if intersection_height < 0 or intersection_width < 0:
+        intersection_area = 0.
+    else:
+        intersection_area = intersection_width * intersection_height
+    return intersection_area
+
 
 def get_box_feats(boxes, d):
     """
