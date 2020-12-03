@@ -180,9 +180,9 @@ crit = utils.LanguageModelCriterion()
 
 # Create the Data Loader instance
 
-if len(opt.image_folder) == 0:
-  loader = DataLoader(opt)
-else:
+# if len(opt.image_folder) == 0:
+#   loader = DataLoader(opt)
+# else:
   # loader = DataLoaderRaw({'folder_path': opt.image_folder,
   #                         'coco_json': opt.coco_json,
   #                         'batch_size': opt.batch_size,
@@ -190,15 +190,17 @@ else:
   #                         'cnn_weight_dir': opt.cnn_weight_dir,
   #                         'boxes_path': opt.input_boxes_path,
   #                         'features_path': opt.input_features_path})
-  loader = DataLoaderDetections({'folder_path': opt.image_folder,
-                                 'batch_size': opt.batch_size,
-                                 'cnn_model': opt.cnn_model,
-                                 'cnn_weight_dir': opt.cnn_weight_dir,
-                                 'boxes_dir': opt.input_boxes_dir,
-                                 'features_dir': opt.input_features_dir,
-                                 'detections_path': opt.input_detections_path
-                                 }
-                                )
+loader = DataLoaderDetections(
+  {
+      # 'folder_path': opt.image_folder,
+      'batch_size': opt.batch_size,
+      'cnn_model': opt.cnn_model,
+      'cnn_weight_dir': opt.cnn_weight_dir,
+      'boxes_dir': opt.input_boxes_dir,
+      'features_dir': opt.input_features_dir,
+      'detections_path': opt.input_detections_path
+     }
+)
 # When eval using provided pretrained model, the vocab may be different from what you have in your cocotalk.json
 # So make sure to use the vocab in infos file.
 loader.ix_to_word = infos['vocab']
@@ -217,4 +219,6 @@ if opt.dump_json == 1:
     # dump the json
     save_dir = os.path.join(os.getcwd(), 'vis/{}'.format(opt.save_id))
     os.makedirs(save_dir, exist_ok=True)
-    json.dump(split_predictions, open(os.path.join(save_dir, 'vis.json'), 'w'))
+    save_path = os.path.join(save_dir, 'vis.json')
+    print(f"Saving Data to {save_path}")
+    json.dump(split_predictions, open(save_path, 'w'))

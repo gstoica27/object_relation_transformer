@@ -71,6 +71,17 @@ def language_eval(dataset, preds, model_id, image_root, split):
 
     return out
 
+def place_on_cuda(data, ordered_keys, batch_size, seq_per_img):
+    cuda_data = []
+    for key in ordered_keys:
+        if key in data:
+            values = data[key][np.arange(batch_size * seq_per_img)]
+            values_tensor = torch.from_numpy(values).cuda()
+        else:
+            values_tensor = None
+        cuda_data.append(values_tensor)
+    return cuda_data
+
 def eval_split(model, crit, loader, eval_kwargs={}):
     verbose = eval_kwargs.get('verbose', True)
     verbose_beam = eval_kwargs.get('verbose_beam', 1)
@@ -95,13 +106,13 @@ def eval_split(model, crit, loader, eval_kwargs={}):
     while True:
         data = loader.get_batch(split)
         n = n + loader.batch_size
-
+        # import pdb; pdb.set_trace()
         if data.get('labels', None) is not None and verbose_loss:
             # forward the model to get loss
             tmp = [data['fc_feats'], data['att_feats'], data['labels'], data['masks'], data['att_masks']]
             tmp = [torch.from_numpy(_).cuda() if _ is not None else _ for _ in tmp]
             fc_feats, att_feats, labels, masks, att_masks = tmp
-
+             # import pdb; pdb.set_trace()
             with torch.no_grad():
                 #if model_opts.use_box:
                 if use_box==True:
@@ -116,19 +127,29 @@ def eval_split(model, crit, loader, eval_kwargs={}):
 
         # forward the model to also get generated samples for each image
         # Only leave one feature for each image, in case duplicate sample
-        tmp = [data['fc_feats'][np.arange(loader.batch_size) * loader.seq_per_img],
-            data['att_feats'][np.arange(loader.batch_size) * loader.seq_per_img],
-            data['att_masks'][np.arange(loader.batch_size) * loader.seq_per_img] if data.get('att_masks', None) is not None else None]
-        tmp = [torch.from_numpy(_).cuda() if _ is not None else _ for _ in tmp]
-        fc_feats, att_feats, att_masks = tmp
+        # tmp = [data['fc_feats'][np.arange(loader.batch_size) * loader.seq_per_img],
+        #     data['att_feats'][np.arange(loader.batch_size) * loader.seq_per_img],
+        #     data['att_masks'][np.arange(loader.batch_size) * loader.seq_per_img] if data.get('att_masks', None) is not None else None]
+
+        # tmp = [torch.from_numpy(_).cuda() if _ is not None else _ for _ in tmp]
+
+        # fc_feats, att_feats, att_masks = tmp
+
+        fc_feats, att_feats, att_masks, bbox_masks = place_on_cuda(
+            data=data,
+            ordered_keys=['fc_feats', 'att_feats', 'att_masks', 'bbox_masks'],
+            batch_size=loader.batch_size,
+            seq_per_img=loader.seq_per_img
+        )
 
         # forward the model to also get generated samples for each image
         with torch.no_grad():
             #if model_opts.use_box:
             if use_box==True:
-                boxes_data= data['boxes'][np.arange(loader.batch_size) * loader.seq_per_img]
+                boxes_data = data['boxes'][np.arange(loader.batch_size) * loader.seq_per_img]
                 boxes = torch.from_numpy(boxes_data).cuda() if boxes_data is not None else boxes_data
-                outputs = model(fc_feats, att_feats, boxes, att_masks, opt=eval_kwargs, mode='sample')
+                outputs = model(fc_feats, att_feats, boxes, att_masks, bbox_masks, opt=eval_kwargs, mode='sample')
+                # import pdb; pdb.set_trace()
                 seq = outputs[0].data
                 selected_bboxes = outputs[-1]
             else:
@@ -140,7 +161,7 @@ def eval_split(model, crit, loader, eval_kwargs={}):
                 print('\n'.join([utils.decode_sequence(loader.get_vocab(), _['seq'].unsqueeze(0))[0] for _ in model.done_beams[i]]))
                 print('--' * 10)
         sents = utils.decode_sequence(loader.get_vocab(), seq)
-
+        # import pdb; pdb.set_trace()
         for k, sent in enumerate(sents):
             image_id = data['infos'][k]['id']
             entry = {'image_id': image_id, 'caption': sent,

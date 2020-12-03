@@ -87,6 +87,7 @@ class Encoder(nn.Module):
         "Pass the input (and mask) through each layer in turn."
         for layer in self.layers:
             x = layer(x, box, mask)
+        # import pdb; pdb.set_trace()
         return self.norm(x)
 
 class LayerNorm(nn.Module):
@@ -211,12 +212,12 @@ class MultiHeadedAttention(nn.Module):
         return self.linears[-1](x)
 
 
-def box_attention(query, key, value, box_relation_embds_matrix, mask=None, dropout=None):
+def box_attention(query, key, value, box_relation_embds_matrix, mask=None, dropout=None, bboxes=None, upper_bound=None):
     '''
     Compute 'Scaled Dot Product Attention as in paper Relation Networks for Object Detection'.
     Follow the implementation in https://github.com/heefe92/Relation_Networks-pytorch/blob/master/model.py#L1026-L1055
     '''
-    import pdb; pdb.set_trace()
+    # import pdb; pdb.set_trace()
     N = value.size()[:2]
     dim_k = key.size(-1)
     dim_g = box_relation_embds_matrix.size()[-1]
@@ -238,17 +239,31 @@ def box_attention(query, key, value, box_relation_embds_matrix, mask=None, dropo
 
     # multiplying log of geometric weights by feature weights
     w_mn = torch.log(torch.clamp(w_g, min = 1e-6)) + w_a
+    # import pdb; pdb.set_trace()
+    # Apply hard constraints on bbox distances
+    # import pdb; pdb.set_trace()
+    if bboxes is not None:
+        # [B, N, N]
+        valid_bboxes = utils.BoxHardConstraints(bboxes=bboxes, upper_bound=upper_bound)
+        # [B, 1, N, N] --> [B, 8, N, N]
+        compat_valid_bboxes = valid_bboxes.unsqueeze(1).repeat(1, 8, 1, 1)
+        # import pdb; pdb.set_trace()
+        w_mn[compat_valid_bboxes == 0.] = -1e9
+    else:
+        valid_bboxes = None
+
     w_mn = torch.nn.Softmax(dim=-1)(w_mn)
     if dropout is not None:
         w_mn = dropout(w_mn)
+
     # Only use the most relevant BBoxes to an ROI bbox to compute caption
-    w_mn_flat = w_mn.view(-1, 36)
-    w_mn_maxes = (w_mn_flat == w_mn_flat.max(dim=1, keepdim=True)[0]).view_as(w_mn).to(dtype=torch.float32)
-    import pdb; pdb.set_trace()
-    output = torch.matmul(w_mn_maxes, w_v)
-    # output = torch.matmul(w_mn,w_v)
-    import pdb;pdb.set_trace()
-    return output, w_mn
+    if bboxes is None:
+        w_mn_flat = w_mn.view(-1, 36)
+        w_mn = (w_mn_flat == w_mn_flat.max(dim=1, keepdim=True)[0]).view_as(w_mn).to(dtype=torch.float32)
+    # import pdb; pdb.set_trace()
+    output = torch.matmul(w_mn,w_v)
+    # import pdb;pdb.set_trace()
+    return output, w_mn, valid_bboxes
 
 class BoxMultiHeadedAttention(nn.Module):
     '''
@@ -310,10 +325,15 @@ class BoxMultiHeadedAttention(nn.Module):
         relative_geometry_weights_per_head = [l(flatten_relative_geometry_embeddings).view(box_size_per_head) for l in self.WGs]
         relative_geometry_weights = torch.cat((relative_geometry_weights_per_head),1)
         relative_geometry_weights = F.relu(relative_geometry_weights)
-
+        # import pdb; pdb.set_trace()
         # 2) Apply attention on all the projected vectors in batch.
-        x, self.box_attn = box_attention(query, key, value, relative_geometry_weights, mask=mask,
-                                 dropout=self.dropout)
+        x, self.box_attn, valid_bboxes = box_attention(query, key, value, relative_geometry_weights, mask=mask,
+                                 dropout=self.dropout, bboxes=input_box, upper_bound=20000)
+
+        # import pdb; pdb.set_trace()
+        # if BBOX_MASKS is not None:
+            # Add bbox encodings to overall value vector
+            # x += value
 
         # 3) "Concat" using a view and apply a final linear.
         x = x.transpose(1, 2).contiguous() \
@@ -323,17 +343,23 @@ class BoxMultiHeadedAttention(nn.Module):
         # kept here for compatibility with some legacy models. In
         # general, there is no advantage in using it, as there is
         # already an outer skip connection surrounding this layer.
-        if self.legacy_extra_skip:
-            x = input_value + x
-
+        # if self.legacy_extra_skip:
+        #     x = input_value + x
+ 
         x = self.linears[-1](x)
 
-        # import pdb; pdb.set_trace()
         if BBOX_MASKS is not None:
             # [B, 36, 512] x [B, 36, 1]
             x *= BBOX_MASKS.unsqueeze(-1)
-            
-        SELECTED_BBOXES = self.box_attn
+        # import pdb; pdb.set_trace()
+        if valid_bboxes is None:
+            SELECTED_BBOXES = np.argmax(self.box_attn.cpu().numpy(), axis=-1)
+        else:
+            # import pdb; pdb.set_trace()
+            # [B, N] --> [B, N, 1]
+            compat_masks = BBOX_MASKS.unsqueeze(-1)
+            roi_bboxes = (compat_masks * valid_bboxes).sum(1).cpu().numpy()
+            SELECTED_BBOXES = np.argwhere(roi_bboxes[0] == 1)
 
         return x
 
@@ -486,7 +512,7 @@ class RelationTransformerModel(CaptionModel):
         if att_masks is None:
             att_masks = att_feats.new_ones(att_feats.shape[:2], dtype=torch.long)
         att_masks = att_masks.unsqueeze(-2)
-        import pdb; pdb.set_trace()
+        # import pdb; pdb.set_trace()
         if seq is not None:
             # crop the last one
             seq = seq[:,:-1]
@@ -530,12 +556,12 @@ class RelationTransformerModel(CaptionModel):
         global SELECTED_BBOXES
         beam_size = opt.get('beam_size', 10)
         batch_size = fc_feats.size(0)
-        import pdb; pdb.set_trace()
+        # import pdb; pdb.set_trace()
         # att_feats, boxes, seq, att_masks, seq_mask = self._prepare_feature(att_feats, att_masks, boxes)
         att_feats, boxes, seq, att_masks, seq_mask = self._prepare_feature(fc_feats, att_masks, boxes)
 
         BBOX_MASKS = bbox_masks
-        import pdb; pdb.set_trace()
+        # import pdb; pdb.set_trace()
         memory = self.model.encode(att_feats, boxes, att_masks)
 
         assert beam_size <= self.vocab_size + 1, 'lets assume this for now, otherwise this corner case causes a few headaches down the road. can be dealt with in future if needed'
@@ -558,8 +584,8 @@ class RelationTransformerModel(CaptionModel):
             self.done_beams[k] = self.beam_search(state, logprobs, tmp_memory, tmp_att_masks, opt=opt)
             seq[:, k] = self.done_beams[k][0]['seq'] # the first beam has highest cumulative score
             seqLogprobs[:, k] = self.done_beams[k][0]['logps']
-        selected_bboxes = np.argmax(SELECTED_BBOXES.cpu().numpy(), axis=-1)
-        import pdb; pdb.set_trace()
+        selected_bboxes = SELECTED_BBOXES
+        # import pdb; pdb.set_trace()
         # return the samples and their log likelihoods
         return seq.transpose(0, 1), seqLogprobs.transpose(0, 1), selected_bboxes
 

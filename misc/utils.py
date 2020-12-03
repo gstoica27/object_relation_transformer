@@ -288,7 +288,7 @@ def BoxHardConstraints(bboxes, upper_bound=20000):
     bboxes: bbox matrix [B, N, 4]
     upper_bound: inverse weight for overlaps
     """
-    import pdb; pdb.set_trace()
+    # import pdb; pdb.set_trace()
     num_bboxes = bboxes.shape[1]
     weight = 1 / upper_bound
     # [B, N, 4] --> [B, N, 1] x 4
@@ -297,29 +297,30 @@ def BoxHardConstraints(bboxes, upper_bound=20000):
     width = y_max - y_min
     areas = height * width
     # [B, N , 1]
-    min_overlap = weight * areas
+    # import pdb; pdb.set_trace()
+    min_overlap = torch.minimum(weight * areas, torch.tensor([1.]).cuda())
     # [B, N, 1] --> [B, N, N]
     x_min = x_min.repeat(1, 1, num_bboxes)
     x_max = x_max.repeat(1, 1, num_bboxes)
     y_min = y_min.repeat(1, 1, num_bboxes)
     y_max = y_max.repeat(1, 1, num_bboxes)
     # [B, N, N] --> [B, N, N]
-    x_min_T = x_min.transpose(0, 2, 1)
-    x_max_T = x_max.transpose(0, 2, 1)
-    y_min_T = y_min.transpose(0, 2, 1)
-    y_max_T = y_max.transpose(0, 2, 1)
+    x_min_T = x_min.permute(0, 2, 1)
+    x_max_T = x_max.permute(0, 2, 1)
+    y_min_T = y_min.permute(0, 2, 1)
+    y_max_T = y_max.permute(0, 2, 1)
 
     inter_width = torch.minimum(x_max_T, x_max) - torch.maximum(x_min_T, x_min) + 1
     inter_height = torch.minimum(y_max_T, y_max) - torch.maximum(y_min_T, y_min) + 1
-    inter_area = inter_width * inter_height
-
-    areas_T = areas.transpose(0, 2, 1)
+    # import pdb; pdb.set_trace()
+    inter_area = torch.nn.functional.relu(inter_width * inter_height)
+    areas_T = areas.permute(0, 2, 1)
     union_areas = areas + areas_T - inter_area
     # IoUs between each bbox and all other bboxes
     ious = inter_area / union_areas
-
+    # import pdb; pdb.set_trace()
     ious_minus_overlap = ious - min_overlap
-    ious_cutoff = torch.minimum(ious_minus_overlap, torch.tensor([0.]))
+    ious_cutoff = torch.maximum(ious_minus_overlap, torch.tensor([0.]).cuda())
     are_valid = ious_cutoff > 0.
     # [B, N, N]
     return are_valid
